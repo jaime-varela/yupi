@@ -99,3 +99,100 @@ def exp_moving_average_filter(
         points=ema, t=traj.t, traj_id=new_traj_id, diff_est=traj.diff_est
     )
     return smooth_traj
+
+# The Kalman filters follow the convention of section 3.3.2 of 
+# "State Estimation For Robotics" by Thomas D. Barafoot with v_k=0.
+# These functions have been left general to incorporate additional dynamics,
+#  beyond the random acceleration model.
+
+#TODO: typing annotations and unit tests
+def _predicted_covariance(previous_covariance: np.ndarray,
+                          transition_matrix: np.ndarray,
+                          process_covariance):
+    predicted_state_covariance = (
+        np.dot(transition_matrix, np.dot(previous_covariance, transition_matrix.T))
+        + process_covariance
+    )
+    return predicted_state_covariance
+
+def _predict_next_state(previous_state,transition_matrix):
+    predicted_state_mean = (
+        np.dot(transition_matrix, previous_state)
+    )
+    return predicted_state_mean
+
+def _kalman_gain(predicted_covariance,observation_matrix,observation_covariance):
+    predicted_observation_covariance = (
+        np.dot(
+            observation_matrix,
+            np.dot(predicted_covariance, observation_matrix.T),
+        )
+        + observation_covariance
+    )
+    kalman_gain = np.dot(
+        predicted_covariance,
+        np.dot(observation_matrix.T, np.linalg.pinv(predicted_observation_covariance)),
+    )
+    return kalman_gain
+
+def _state_corrector(observation,kalman_gain,predicted_state,observation_matrix):
+    predicted_observation_mean = (
+            np.dot(observation_matrix, predicted_state)
+    )
+    corrected_state_mean = predicted_state + np.dot(
+            kalman_gain, observation - predicted_observation_mean
+    )
+    return corrected_state_mean
+
+def _kalman_filter_from_generators(n_timesteps:int,
+        initial_state_mean: np.ndarray,
+        initial_state_covariance: np.ndarray,
+        get_observation_matrix: function,
+        get_transition_matrix: function,
+        get_process_covariance: function,
+        get_measurement_covariance: function
+    ):
+    
+    n_dim_state = initial_state_mean.shape[0]
+    n_dim_obs = None
+
+    # Might be worth it to not pre-allocate these matrices
+    previous_state_covariance = initial_state_covariance
+    previous_state = initial_state_mean
+
+    for t in range(n_timesteps):
+        transition_matrix = get_transition_matrix(t)
+        process_covariance = get_process_covariance(t)
+        predicted_covariance = _predicted_covariance(previous_state_covariance,
+                                                     transition_matrix,
+                                                     process_covariance)
+        predicted_state = _predict_next_state(previous_state,transition_matrix)
+
+        observation_matrix = get_observation_matrix(t)
+        observation_covariance = get_measurement_covariance(t)
+        kalman_gain = _kalman_gain(predicted_covariance,
+                                   observation_matrix,
+                                   observation_covariance)
+        
+
+        # update the previous state
+        # TODO: Finish
+
+    return 
+
+
+def _covariance_corrector(predicted_covariance,kalman_gain,observation_matrix):
+    corrected_state_covariance = predicted_covariance - np.dot(
+            kalman_gain, np.dot(observation_matrix, predicted_covariance)
+        )
+    return corrected_state_covariance
+
+def kalman_random_acceleration_filter(
+        traj: Trajectory, sigma_a: float,
+        initial_state_mean : np.ndarray,
+        new_traj_id: Optional[str] = None
+):
+    return False
+
+
+
