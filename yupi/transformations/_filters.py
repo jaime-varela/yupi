@@ -3,7 +3,7 @@ This contains filtering functions for the trajectories.
 """
 
 from typing import Optional
-
+from typing import Callable
 import numpy as np
 
 from yupi.trajectory import Trajectory
@@ -105,7 +105,6 @@ def exp_moving_average_filter(
 # These functions have been left general to incorporate additional dynamics,
 #  beyond the random acceleration model.
 
-#TODO: typing annotations and unit tests
 def _predicted_covariance(previous_covariance: np.ndarray,
                           transition_matrix: np.ndarray,
                           process_covariance):
@@ -144,17 +143,27 @@ def _state_corrector(observation,kalman_gain,predicted_state,observation_matrix)
     )
     return corrected_state_mean
 
+
+def _covariance_corrector(predicted_covariance,kalman_gain,observation_matrix):
+    corrected_state_covariance = predicted_covariance - np.dot(
+            kalman_gain, np.dot(observation_matrix, predicted_covariance)
+        )
+    return corrected_state_covariance
+
+
 def _kalman_filter_from_generators(n_timesteps:int,
         initial_state_mean: np.ndarray,
         initial_state_covariance: np.ndarray,
-        get_observation_matrix: function,
-        get_transition_matrix: function,
-        get_process_covariance: function,
-        get_measurement_covariance: function
+        get_observation: Callable[[int], np.ndarray],
+        get_observation_matrix: Callable[[int], np.ndarray],
+        get_transition_matrix: Callable[[int], np.ndarray],
+        get_process_covariance: Callable[[int], np.ndarray],
+        get_measurement_covariance: Callable[[int], np.ndarray]
     ):
     
     n_dim_state = initial_state_mean.shape[0]
-    n_dim_obs = None
+    filtered_state_means = np.zeros((n_timesteps, n_dim_state))
+    filtered_state_covariances = np.zeros((n_timesteps, n_dim_state, n_dim_state))
 
     # Might be worth it to not pre-allocate these matrices
     previous_state_covariance = initial_state_covariance
@@ -174,24 +183,32 @@ def _kalman_filter_from_generators(n_timesteps:int,
                                    observation_matrix,
                                    observation_covariance)
         
+        observation = get_observation(t)
+        filtered_state = _state_corrector(observation,
+                                          kalman_gain,
+                                          predicted_state,
+                                          observation_matrix)
 
-        # update the previous state
-        # TODO: Finish
+        filtered_covariance = _covariance_corrector(predicted_covariance,
+                                                    kalman_gain,
+                                                    observation_matrix)
 
-    return 
+        filtered_state_means[t] = filtered_state
+        filtered_state_covariances[t] = filtered_covariance
+        previous_state = filtered_state
+        previous_state_covariance = filtered_covariance
 
+    # maybe return the Kalman gains as well?
+    return filtered_state_means, filtered_state_covariances
 
-def _covariance_corrector(predicted_covariance,kalman_gain,observation_matrix):
-    corrected_state_covariance = predicted_covariance - np.dot(
-            kalman_gain, np.dot(observation_matrix, predicted_covariance)
-        )
-    return corrected_state_covariance
 
 def kalman_random_acceleration_filter(
         traj: Trajectory, sigma_a: float,
         initial_state_mean : np.ndarray,
         new_traj_id: Optional[str] = None
 ):
+    # TODO: set up the transition matrices, observation matrices, etc for
+    # the random acceleration Kalman model
     return False
 
 
